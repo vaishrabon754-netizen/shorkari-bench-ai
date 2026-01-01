@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Striker Mobile - Manual Fire</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.8); z-index: 100; }
+        .title { font-size: 12vw; color: #00f2fe; text-shadow: 0 0 15px #00f2fe; margin: 0; font-weight: 900; text-align: center; }
+        .btn { margin-top: 30px; padding: 15px 50px; font-size: 24px; background: #00f2fe; border: none; color: #000; border-radius: 50px; font-weight: bold; }
+        #stats { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: space-around; color: #00f2fe; font-size: 18px; font-weight: bold; pointer-events: none; }
+        #boss-ui { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80%; height: 10px; border: 1px solid #ff0055; display: none; }
+        #boss-health { width: 100%; height: 100%; background: #ff0055; }
+    </style>
+</head>
+<body>
+
+    <div id="stats">
+        <span id="score">SCORE: 0</span>
+        <span id="hp">HP: 100%</span>
+    </div>
+
+    <div id="boss-ui"><div id="boss-health"></div></div>
+
+    <div id="ui-layer">
+        <h1 class="title">NEON<br>STRIKER</h1>
+        <p style="color: #aaa; margin-top: 10px;">Hold to Shoot, Release to Stop!</p>
+        <button class="btn" onclick="startGame()">START</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const ui = document.getElementById("ui-layer");
+        const bossUI = document.getElementById("boss-ui");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let gameActive = false;
+        let isTouching = false; // Guli control korar jonno
+        let score = 0;
+        let hp = 100;
+        let bullets = [];
+        let enemies = [];
+        let boss = null;
+        let touch = { x: canvas.width / 2, y: canvas.height - 100 };
+        let frame = 0;
+
+        // Touch Controls
+        window.addEventListener('touchstart', (e) => {
+            isTouching = true;
+            updateTouch(e);
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            isTouching = false;
+        }, { passive: false });
+
+        window.addEventListener('touchmove', updateTouch, { passive: false });
+
+        function updateTouch(e) {
+            if (e.touches[0]) {
+                touch.x = e.touches[0].clientX;
+                touch.y = e.touches[0].clientY;
+            }
+            if (gameActive) e.preventDefault();
+        }
+
+        class Boss {
+            constructor() {
+                this.width = canvas.width * 0.6;
+                this.height = 40;
+                this.x = (canvas.width - this.width) / 2;
+                this.y = -100;
+                this.hp = 1000;
+                this.dir = 1;
+            }
+            update() {
+                if (this.y < 60) this.y += 2;
+                this.x += this.dir * 3;
+                if (this.x <= 0 || this.x + this.width >= canvas.width) this.dir *= -1;
+            }
+            draw() {
+                ctx.fillStyle = "#ff0055";
+                ctx.shadowBlur = 20; ctx.shadowColor = "#ff0055";
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        function startGame() {
+            ui.style.display = "none";
+            gameActive = true; score = 0; hp = 100; boss = null;
+            enemies = []; bullets = []; bossUI.style.display = "none";
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            frame++;
+            ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Ship
+            ctx.strokeStyle = "#00f2fe"; ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(touch.x, touch.y - 25);
+            ctx.lineTo(touch.x - 20, touch.y + 15);
+            ctx.lineTo(touch.x + 20, touch.y + 15);
+            ctx.closePath(); ctx.stroke();
+
+            // SHOOT ONLY IF TOUCHING (Manual/Hold Control)
+            if (isTouching && frame % 10 === 0) {
+                bullets.push({ x: touch.x, y: touch.y - 30 });
+            }
+
+            if (score >= 500 && !boss) {
+                boss = new Boss();
+                bossUI.style.display = "block";
+            }
+
+            if (boss) {
+                boss.update(); boss.draw();
+                document.getElementById("boss-health").style.width = (boss.hp / 10) + "%";
+                if (boss.hp <= 0) { alert("BOSS DESTROYED!"); location.reload(); }
+            } else if (Math.random() < 0.04) {
+                enemies.push({ x: Math.random() * (canvas.width - 30), y: -50, size: 30 });
+            }
+
+            bullets.forEach((b, bi) => {
+                b.y -= 12;
+                ctx.fillStyle = "#fff"; ctx.fillRect(b.x - 2, b.y, 4, 15);
+                if (boss && b.x > boss.x && b.x < boss.x + boss.width && b.y < boss.y + boss.height) {
+                    boss.hp -= 5; bullets.splice(bi, 1);
+                }
+                if (b.y < 0) bullets.splice(bi, 1);
+            });
+
+            enemies.forEach((e, ei) => {
+                e.y += 5;
+                ctx.strokeStyle = "#ff0055"; ctx.strokeRect(e.x, e.y, e.size, e.size);
+                bullets.forEach((b, bi) => {
+                    if (b.x > e.x && b.x < e.x + e.size && b.y < e.y + e.size && b.y > e.y) {
+                        enemies.splice(ei, 1); bullets.splice(bi, 1); score += 10;
+                    }
+                });
+                if (touch.x > e.x && touch.x < e.x + e.size && touch.y > e.y && touch.y < e.y + e.size) {
+                    hp -= 20; enemies.splice(ei, 1);
+                }
+                if (e.y > canvas.height) { enemies.splice(ei, 1); hp -= 5; }
+            });
+
+            document.getElementById("score").innerText = "SCORE: " + score;
+            document.getElementById("hp").innerText = "HP: " + hp + "%";
+
+            if (hp <= 0) { gameActive = false; ui.style.display = "flex"; document.querySelector(".title").innerText = "FAILED"; }
+            else requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
